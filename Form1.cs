@@ -78,10 +78,10 @@ namespace CNET_TEST
                 try
                 {
                     string s = input.Text;
-                    DataHeader dataHeader = new DataHeader(0x03, (UInt16)s.Length);
+                    byte[] data = Encoding.UTF8.GetBytes(s);
+                    DataHeader dataHeader = new DataHeader(0x03, (UInt16)data.Length);
                     byte[] header = StructToBytes(dataHeader);
-                    ShowMsg(dataHeader.flags + " " + dataHeader.data_len);
-                    byte[] data = Encoding.UTF8.GetBytes(input.Text);
+                    //ShowMsg(dataHeader.flags + " " + dataHeader.data_len);
                     int len = header.Length + data.Length;
                     byte[] buffer = new byte[len];
                     //Buffer.BlockCopy(header, 0, buffer, 0, header.Length);
