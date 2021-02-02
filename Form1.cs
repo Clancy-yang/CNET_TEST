@@ -105,6 +105,11 @@ namespace CNET_TEST
 
         private void button2_Click(object sender, EventArgs e)
         {
+            if(textBox2.Text.Length == 0)
+            {
+                MessageBox.Show("请在左侧填写一个名称");
+                return;
+            }
             if(client == null)
             {
                 client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -115,8 +120,13 @@ namespace CNET_TEST
             {
                 client.Connect(point);
                 ShowMsg("连接成功");
-                DataHeader data = new DataHeader(0x01, 0);
-                byte[] buffer = StructToBytes(data);
+                string s = textBox2.Text;
+                byte[] data = Encoding.UTF8.GetBytes(s);
+                DataHeader dataHeader = new DataHeader(0x01, (UInt16)data.Length);
+                byte[] header = StructToBytes(dataHeader);
+                int len = header.Length + data.Length;
+                byte[] buffer = new byte[len];
+                buffer = header.Concat(data).ToArray();
                 client.Send(buffer);
                 ShowMsg("登录中..");
                 //连接成功后，就可以接收服务器发送的信息了
@@ -249,6 +259,11 @@ namespace CNET_TEST
                 ShowMsg("未连接!");
             }
             
+        }
+
+        private void textBox2_TextChanged_1(object sender, EventArgs e)
+        {
+
         }
     }
 
