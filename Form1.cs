@@ -26,8 +26,11 @@ namespace CNET_TEST
             this.data_len = data_len;
         }
     };
+
     public partial class Form1 : Form
     {
+
+        private bool connet_status = false;
 
         public Form1()
         {
@@ -36,63 +39,28 @@ namespace CNET_TEST
 
         private void Form1_Load(object sender, EventArgs e)
         {
-
+            foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcesses())
+            {
+                process_id_CB.Items.Add(new ComboxItem(p.ProcessName + "(" + p.Id + ")", p.Id));
+            }
         }
 
-        private void textBox1_TextChanged(object sender, EventArgs e)
+        private void process_id_CB_Click(object sender, EventArgs e)
         {
-
-        }
-
-        private void button1_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void pictureBox1_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void listBox1_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
-        }
-
-        private void textBox1_TextChanged_1(object sender, EventArgs e)
-        {
-
-        }
-
-        
-
-        private void textBox2_TextChanged(object sender, EventArgs e)
-        {
-
+            process_id_CB.Items.Clear();
+            foreach (System.Diagnostics.Process p in System.Diagnostics.Process.GetProcesses())
+            {
+                process_id_CB.Items.Add(new ComboxItem(p.ProcessName + "(" + p.Id + ")", p.Id));
+            }
         }
 
         private void button1_Click_1(object sender, EventArgs e)
         {
-            if(client != null)
+            // 发送消息
+            if (connet_status)
             {
-                try
-                {
-                    string s = input.Text;
-                    byte[] data = Encoding.UTF8.GetBytes(s);
-                    DataHeader dataHeader = new DataHeader(0x03, (UInt16)data.Length);
-                    byte[] header = StructToBytes(dataHeader);
-                    //ShowMsg(dataHeader.flags + " " + dataHeader.data_len);
-                    int len = header.Length + data.Length;
-                    byte[] buffer = new byte[len];
-                    //Buffer.BlockCopy(header, 0, buffer, 0, header.Length);
-                    //Buffer.BlockCopy(data, 0, buffer, header.Length, data.Length);
-                    buffer = header.Concat(data).ToArray();
-                    client.Send(buffer);
-                }
-                catch(Exception ex)
-                {
-                    ShowMsg(ex.Message);
-                }
+                SendMessage(0x03, input.Text);
+                input.Text = "";
             }
             else
             {
@@ -105,42 +73,70 @@ namespace CNET_TEST
 
         private void button2_Click(object sender, EventArgs e)
         {
-            if(client == null)
+            // 登录按钮
+            if(textBox2.Text.Length == 0)
             {
-                client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                MessageBox.Show("请在左侧填写一个名称");
+                return;
             }
-            IPAddress ip = IPAddress.Parse("121.43.42.24");
-            IPEndPoint point = new IPEndPoint(ip, int.Parse("1234"));
-            try
+            if(process_id_CB.Text.Length == 0)
             {
-                client.Connect(point);
-                ShowMsg("连接成功");
-                DataHeader data = new DataHeader(0x01, 0);
-                byte[] buffer = StructToBytes(data);
-                client.Send(buffer);
-                ShowMsg("登录中..");
-                //连接成功后，就可以接收服务器发送的信息了
-                th = new Thread(new ThreadStart(delegate
+                MessageBox.Show("请先绑定一个进程");
+                return;
+            }
+            if (!connet_status)
+            {
+                if (client == null)
                 {
-                    Control.CheckForIllegalCrossThreadCalls = false;//添加这一句即可
-                    ReceiveMsg();
-                }));
-                th.IsBackground = true;
-                th.Start();
-            }
-            catch (Exception ex)
-            {
-                ShowMsg("连接失败[" + ex.Message + "]");
-            }
+                    client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                }
+                IPAddress ip = IPAddress.Parse("121.43.42.24");
+                IPEndPoint point = new IPEndPoint(ip, int.Parse("1234"));
+                try
+                {
+                    client.Connect(point);
+                    ShowMsg("连接成功");
+                    service_status.Text = "连接成功";
+                    service_status.ForeColor = Color.Lime;
+                    SendMessage(0x01, textBox2.Text);
+                    ShowMsg("登录中..");
+                    //连接成功后，就可以接收服务器发送的信息了
+                    th = new Thread(new ThreadStart(delegate
+                    {
+                        Control.CheckForIllegalCrossThreadCalls = false;//添加这一句即可
+                        ReceiveMsgThread();
+                    }));
+                    th.IsBackground = true;
+                    th.Start();
+                    connet_status = true;
 
+                    process_id_CB.Enabled = false; // 进程列表
+                    button2.Enabled = false;// 连接
+                    button3.Enabled = true; // 退出
+                    button1.Enabled = true; // 发送
+                    input.Enabled = true;   // 输入框
+                    textBox2.Enabled = false; // 用户名
+                }
+                catch (Exception ex)
+                {
+                    service_status.Text = "连接失败";
+                    service_status.ForeColor = Color.Red;
+                    ShowMsg("连接失败[" + ex.Message + "]");
+                    connet_status = false;
+                }
+            }
+            else
+            {
+                ShowMsg("已连接!请勿重复连接!");
+            }
         }
 
-        //接收服务器的消息
-        void ReceiveMsg()
+        //接收服务器的消息线程
+        void ReceiveMsgThread()
         {
             while (true)
             {
-                if (client == null) break;
+                if (!connet_status) break;
                 
                 try
                 {
@@ -152,16 +148,24 @@ namespace CNET_TEST
 
                     if(flag == 0x01 || flag == 0x03)
                     {
-                        ShowMsg(client.RemoteEndPoint.ToString() + ":" + data);
+                        //ShowMsg(client.RemoteEndPoint.ToString() + ":" + data);
+                        ShowMsg(data);
                     }
                     else if (flag == 0x02)
                     {
-                        ShowMsg(client.RemoteEndPoint.ToString() + ":" + data);
+                        ShowMsg(data);
                         client.Shutdown(SocketShutdown.Both);
                         client.Close();
                         client = null;
                         Application.ExitThread();
+                        connet_status = false;
                         break;
+                    }
+                    else if (flag == 0x04)
+                    {
+                        ShowMsg(data);
+                        KillProcess(((ComboxItem)process_id_CB.SelectedItem).Values);
+                        SendMessage(0x03, "执行KILL进程命令");
                     }
                 }
                 catch(Exception ex)
@@ -173,6 +177,123 @@ namespace CNET_TEST
             return; 
         }
 
+        private void button3_Click(object sender, EventArgs e)
+        {
+            if(connet_status)
+            {
+                try
+                {
+                    SendMessage(0x02, "");
+                    ShowMsg("退出中..");
+                    service_status.Text = "未连接";
+                    service_status.ForeColor = Color.Red;
+                    connet_status = false;
+
+                    process_id_CB.Enabled = true; // 进程列表
+                    button2.Enabled = true;   // 连接
+                    button3.Enabled = false;  // 退出
+                    button1.Enabled = false;  // 发送
+                    input.Enabled = false;    // 输入框
+                    textBox2.Enabled = true; // 用户名
+                }
+                catch (Exception ex)
+                {
+                    ShowMsg(ex.Message);
+                }
+            }
+            else
+            {
+                ShowMsg("未连接!");
+            }
+        }
+
+        private void comboBox1_SelectedIndexChanged(object sender, EventArgs e)
+        { 
+           if(process_id_CB.Text.Length == 0)
+            {
+                process_status.Text = "未绑定";
+                process_status.ForeColor = Color.Red;
+            }
+            else
+            {
+                process_status.Text = "绑定成功:"+ process_id_CB.Text;
+                process_status.ForeColor = Color.Lime;
+            }
+        }
+
+        private void Form1_KeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.KeyCode)
+            {
+                case Keys.F3:
+                    if(process_id_CB.Text.Length == 0)
+                    {
+                        MessageBox.Show("未绑定进程ID");
+                    }
+                    else if (!connet_status)
+                    {
+                        MessageBox.Show("未连接到服务器");
+                    }
+                    else
+                    {
+                        // 发送杀死进程信号
+                        //ShowMsg("发送KILL进程信号!");
+                        SendMessage(0x04, "发送KILL进程信号!");
+                    }
+                    break;
+                case Keys.Enter:
+                    // 发送消息
+                    if (connet_status)
+                    {
+                        SendMessage(0x03, input.Text);
+                        input.Text = "";
+                    }
+                    else
+                    {
+                        ShowMsg("未连接!");
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// 关闭进程
+        /// </summary>
+        /// <param name="processName">进程名</param>
+        private void KillProcess(int id)
+        {
+            System.Diagnostics.Process[] myproc = System.Diagnostics.Process.GetProcesses();
+            foreach (System.Diagnostics.Process item in myproc)
+            {
+                if (item.Id == id)
+                {
+                    item.Kill();
+                }
+            }
+        }
+
+        /// <summary>
+        /// 发送指定代码和字符串
+        /// </summary>
+        /// <param name="flags"></param>
+        /// <param name="s"></param>
+        private void SendMessage(UInt16 flags, string s)
+        {
+            try
+            {
+                byte[] data = Encoding.UTF8.GetBytes(s);
+                DataHeader dataHeader = new DataHeader(flags, (UInt16)data.Length);
+                byte[] header = StructToBytes(dataHeader);
+                int len = header.Length + data.Length;
+                byte[] buffer = new byte[len];
+                buffer = header.Concat(data).ToArray();
+                client.Send(buffer);
+            }
+            catch (Exception ex)
+            {
+                ShowMsg(ex.Message);
+            }
+        }
 
         /// <summary>
         /// 结构体转化成byte[]
@@ -196,59 +317,45 @@ namespace CNET_TEST
                 Marshal.FreeHGlobal(buffer);
             }
         }
-        /// <summary>
-        /// byte[]转化成结构体
-        /// </summary>
-        /// <param name="bytes"></param>
-        /// <param name="strcutType"></param>
-        /// <returns></returns>
-        public static Object BytesToStruct(Byte[] bytes, Type strcutType)
-        {
-            Int32 size = Marshal.SizeOf(strcutType);
-            IntPtr buffer = Marshal.AllocHGlobal(size);
-            try
-            {
-                Marshal.Copy(bytes, 0, buffer, size);
 
-                return Marshal.PtrToStructure(buffer, strcutType);
-            }
-            finally
-            {
-                Marshal.FreeHGlobal(buffer);
-            }
-        }
+        /// <summary>
+        /// 将字符串输出到屏幕
+        /// </summary>
         void ShowMsg(string msg)
         {
             textBox1.AppendText(msg + "\r\n");
         }
 
-        public int IntToBitConverter(byte[] bytes)
+
+    }
+
+    public class ComboxItem
+    {
+        private string text;
+        private int values;
+
+        public string Text
         {
-            int temp = BitConverter.ToInt32(bytes, 0);
-            return temp;
+            get { return this.text; }
+            set { this.text = value; }
         }
 
-        private void button3_Click(object sender, EventArgs e)
+        public int Values
         {
-            if(client != null)
-            {
-                try
-                {
-                    DataHeader data = new DataHeader(0x02, 0);
-                    byte[] buffer = StructToBytes(data);
-                    client.Send(buffer);
-                    ShowMsg("退出中..");
-                }
-                catch (Exception ex)
-                {
-                    ShowMsg(ex.Message);
-                }
-            }
-            else
-            {
-                ShowMsg("未连接!");
-            }
-            
+            get { return this.values; }
+            set { this.values = value; }
+        }
+
+        public ComboxItem(string _Text, int _Values)
+        {
+            Text = _Text;
+            Values = _Values;
+        }
+
+
+        public override string ToString()
+        {
+            return Text;
         }
     }
 
